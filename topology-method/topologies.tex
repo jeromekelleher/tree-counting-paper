@@ -1,0 +1,198 @@
+\documentclass{article}
+
+\usepackage{amsmath, amsfonts, amsthm}
+\usepackage{algorithm, algpseudocode}
+
+\newcommand{\tskit}{{\texttt{tskit}}}
+\newcommand{\halfopen}[2]{[#1, #2)}
+\newcommand{\wlw}{\wedge{} \ldots{} \wedge{}}
+\newcommand{\nleaves}[1]{|#1|}
+\newcommand{\shape}[1]{shape(#1)}
+\newcommand{\labels}[1]{labels(#1)}
+\newcommand{\smallgap}{{\hspace{0.5em}}}
+\newcommand{\multichoose}[2]{\left(\!\!{#1 \choose{} #2}\!\!\right)}
+
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+\begin{document}
+
+\title{Counting Topologies}
+\author{Daniel Goldstein}
+\maketitle
+
+\begin{abstract}
+    This document outlines the steps taken to efficiently and exactly
+    count phylogenetic tree topologies represented in tree sequences.
+    The first step is to formulate a reversible hash for leaf-labelled
+    trees to efficiently count tree topologies.
+    We can obtain this hash using a combinatorial approach, using
+    the ranks of trees in the enumeration of leaf-labelled trees.
+    The second step uses these tree ranks to count
+    topologies inside a large gene tree with a dynamic programming
+    approach. This approach works remarkably well for a single tree,
+    but proves most effective in its use as part of an incremental
+    algorithm on tree sequences, allowing us to fully compute the
+    species tree distributions for large numbers of trees in record time.
+\end{abstract}
+
+\section{Ranking/Unranking Topologies}
+In order to make counting easy we need to define some sort of hash that
+exactly describes the space of topologies we are looking to count.
+
+Even though we're mostly interested in bifurcating trees, \tskit{}
+represents general trees with any number of children at a node, so we
+will too. This is a superset of binary trees so we can still capture
+all the same information.
+
+So for some definitions.
+
+\begin{definition}
+    Let $S_n$ be the sequence of all unlabelled trees of $n$ leaves.
+\end{definition}
+
+\begin{definition}[Shape Rank]
+    Let the shape rank of a tree $T$ with $n$ leaves be the index of the
+    unlabelled $T$ in $S_n$.
+\end{definition}
+
+\begin{definition}
+    Let $L_{s;n}$ be the sequence of all labellings of the tree of $n$ leaves
+    and shape rank $s$.
+\end{definition}
+
+\begin{definition}[Label Rank]
+    Let the label rank of a tree $T$ with $n$ leaves and shape rank $s$
+    be the index of $T$ in $L_{s;n}$.
+\end{definition}
+
+From these definitions we can define the set of all leaf-labelled
+series-reduced trees of $n$ leaves to be
+
+\[
+    \mathbb{T}_n = \{ T_{s;l} | s \in \halfopen{0}{|S_n|},
+                                l \in \halfopen{0}{|L_{s;n}|} \}
+\]
+
+where $T_{s;l}$ is the tree with shape rank $s$ and label rank $l$.
+
+\subsection{Enumerating All Tree Topologies}
+We must now show how we generate $S_n$ and $L_{s;n}$. To define an enumeration
+of trees we will define a canonical orientation, and then a partial ordering.
+
+\subsubsection{Canonical Orientation}
+We say that $T = T_0 \wlw{} T_m$ is canonically oriented iff
+\[
+    \nleaves{T_0} \leq \cdots \leq \nleaves{T_m}
+\]
+and
+\[
+    \shape{T_i} = \shape{T_j} \implies \min{\labels{T}} < \min{\labels{T'}}
+\]
+for all $i,j \in [0, m]$ where $i < j$. Note that the first condition on the ordering
+requires the integer partition of $n$ that generates $T$ be an ascending composition.
+
+\subsubsection{Ordering}
+Let $T, T' \in S_n$, where $T = T_0 \wlw{} T_m$ and $T' = T'_0 \wlw{} T'_{m'}$.
+We define
+\[
+    T < T' \iff \exists k \in [0, \min{(m, m')}]
+    \smallgap \big{|} \smallgap
+    \nleaves{T_k} < \nleaves{T'_k}
+    \smallgap \text{and} \smallgap
+    \nleaves{T_i} = \nleaves{T'_i} \quad \forall i < k.
+\]
+
+\subsubsection{Enumerating}
+Discuss here how the canonical orientation maps directly to ascending compositions
++ lexicographic choosing of labels. It also might be nice to note how we can reduce
+the tree space to solely binary trees by filtering the ascending compositions to
+only size-2 partitions.
+
+\subsection{Ranking}
+We define an injective ranking function $R : T \rightarrow \mathbb{N} \times
+\mathbb{N}$, such that
+\[
+    R(T) = (R_s(T), R_l(T)) = (s, l) \implies
+    s \in \halfopen{0}{|S_n|}, l \in \halfopen{0}{|L_{s;n}|}
+\]
+
+where $s$ and $l$ represent the shape and label ranks of $T$, respectively.
+We can easily construct a ranking function to the natural numbers
+with the following extension
+$R' : \mathbb{N} \times \mathbb{N} \rightarrow \mathbb{N}$:
+\[
+    R'(s, l) = \sum_{i=0}^{s - 1} |L_{i;n}| + l
+\]
+but as the following sections rely on the knowledge of $s$ and $l$, we will
+mostly forego $R'$ and consider the tuple $(s, l)$ as a rank.
+
+To show that $R$ is a proper ranking function we must show that
+\[
+    T \neq T' \implies R(T) \neq R(T')
+\]
+or more powerfully we can show, with the canonical ordering, that
+
+\[
+    T < T' \implies R(T) < R(T')
+\]
+
+This can be broken into two cases:
+\begin{enumerate}
+    \item $\shape{T} \neq \shape{T'}$ we need only show that $R_s(T) < R_s(T')$.
+    \item $\shape{T} = \shape{T'}$ we can see that $R_s(T) = R_s(T')$ and we must
+        then show that $R_l(T) < R_l(T')$.
+\end{enumerate}
+
+\subsubsection{Defining $R_s$}
+First for some partition definitions.
+
+\begin{definition}
+    A partition $P_n$ is a sequence of pairs $(p_0, c_0), \ldots, (p_k, c_k)$ such
+    that
+    \[
+        \sum_{i=0}^k p_i c_i = n
+    \]
+    and $p_0 < \cdots < p_k$. This is known as part-count form.
+\end{definition}
+
+\begin{definition}
+    Let $P(T_0, \ldots, T_k) \rightarrow P_{\sum_{i=0}^k \nleaves{T_i}}$
+    be a function that given a sequence of trees returns the integer partition that
+    describes the numbers of leaves in each tree in part-count form.
+\end{definition}
+
+\begin{definition}
+    Let $rk(P_n)$ be the rank of a given partition in the enumeration of ascending
+    compositions of $n$.
+\end{definition}
+
+
+Let $T = T_0 \wlw T_m \in S_n$. We can define $R_s(T)$ as
+\[
+    R_s(T) = \sum_{i=0}^{rk(P)} f(P_n^i) + \sum_{i=0}^m R_s(T_i)f(P(T_i, \ldots, T_m))
+\]
+
+% Think of reasonable symbol for f
+where $f$ is the function that produces the number of unique tree shapes possible
+given a partition.
+\[
+    f(P_n)
+    = f((p_0, c_0), \ldots, (p_k, c_k))
+    = \prod_{i=0}^k \multichoose{|S_{p_i}|}{c_i}
+\]
+
+TODO
+Can now go on to show $T < T' \land \shape{T} \neq \shape{T'} \implies R_s(T) < R_s(T')$
+by showing that
+\[
+    \sum_{i=0}^m R_s(T_i)f(P(T_i, \ldots, T_m)) < f(P(T_0, \ldots, T_m))
+\]
+
+\subsubsection{Defining $R_l$}
+
+\subsection{Unranking}
+For this probably best to split it up into something like
+$U(s, l, n) = U_l(U_s(s, n), l)$.
+
+\end{document}
