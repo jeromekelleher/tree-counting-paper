@@ -18,3 +18,9 @@ unlabelled trees:
 	> [https://ms609.github.io/TreeTools/reference/TreeShape.html
 ](https://ms609.github.io/TreeTools/reference/TreeNumber.html) I'd be interested to hear if you come across an effective way to enumerate
 unrooted tree shapes, which is a less straightforward affair...
+
+* (Yan - also from the author of the R phylogenetics package, Emmanuel Paradis:
+	> Ranking topologies seems related to previous works on matchings by Diaconis & Holmes (see the reference cited in ?as.matching). A related work is the geodesic distance implemented in the package distory (which I maintain now). The latter is more general since it considers branch lengths.
+
+	> Maybe there is also a connection between tree ranking and topological distances (see ?nni in phangorn).
+
